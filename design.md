@@ -1,434 +1,1331 @@
-# Design Document: Sahayak - AI Health Agent for Rural India
+# Design Document: Sahayak Health Services Application
 
-## Overview
+## 1. System Architecture
 
-Sahayak is a mobile-first, multi-modal AI health agent designed to bridge healthcare access gaps for rural Indian populations. The system leverages ABDM’s UHI network and government healthcare schemes, powered by AI to provide voice-based doctor discovery and vision-based medicine finding capabilities, specifically targeting non-English speaking users in rural areas.
+### 1.1 High-Level Architecture
 
-### Core Capabilities
+The Sahayak application follows a mobile-first, cloud-backed architecture optimized for low-bandwidth environments:
 
-1. **Voice-First Doctor Discovery**: Users speak symptoms in their native language, and the system performs intelligent triage to recommend appropriate specialists and find nearby healthcare providers via the UHI network
-2. **Vision-Based Medicine Finder**: Users upload prescription photos, and the system extracts medicine names, maps brands to generics, and finds the cheapest alternatives at Jan Aushadhi Kendras
-3. **Multilingual Support**: All interactions support multiple Indian languages with voice input/output
-4. **Cost Optimization**: Prioritizes free government hospitals (PMJAY) and generic medicines to reduce healthcare costs
-5. **Emergency Escalation**: Identifies potentially dangerous symptoms early and alerts users to seek urgent hospital care
-
-### Design Principles
-
-- **Mobile-First**: Optimized for smartphone usage with touch and voice interfaces
-- **Low-Bandwidth Friendly**: Optimized for rural network conditions
-- **Safety-First**: Medical triage prioritizes patient safety by over-estimating urgency
-- **Privacy-Preserving**: No persistent storage of sensitive health data (audio, images)
-- **Hackathon-Ready**: Mock data integration for rapid development and demonstration
-
-#### Medical Safety Disclaimer
-- Sahayak does not provide medical diagnosis or treatment advice.
-- The system performs symptom-based triage for access and urgency classification only and always recommends consultation with qualified healthcare professionals.
-
-## Architecture
-
-### High-Level System Architecture
-
-```mermaid
-graph TB
-    subgraph Mobile["Mobile Application (React Native/Flutter)"]
-        Voice[Voice Interface<br/>Microphone]
-        Camera[Camera Interface<br/>Prescription]
-    end
-    
-    Voice -->|Audio<br/>Hindi/Tamil| Gateway
-    Camera -->|Image<br/>JPEG/PNG| Gateway
-    
-    Gateway[API Gateway REST]
-    
-    Gateway --> VoiceTriage[Voice Triage Endpoint<br/>/api/v1/triage]
-    Gateway --> VisionProc[Vision Processing Endpoint<br/>/api/v1/prescription]
-    
-    subgraph Backend["Backend Service Layer (Python FastAPI/Node.js)"]
-        VoiceTriage --> BedrockAgent
-        VisionProc --> BedrockAgent
-        
-        BedrockAgent[Amazon Bedrock Agent<br/>Claude 3.5 Sonnet<br/><br/>Action Groups:<br/>• tool_find_doctor<br/>• tool_find_medicine]
-        
-        BedrockAgent --> UHIService[UHI Discovery Service]
-        BedrockAgent --> MedService[Medicine Price Service]
-    end
-    
-    subgraph AWS["AWS AI/ML Services"]
-        Transcribe[Amazon Transcribe<br/>STT]
-        Polly[Amazon Polly<br/>TTS]
-        Textract[Amazon Textract<br/>OCR]
-        Location[Amazon Location Service<br/>Geolocation]
-    end
-    
-    UHIService --> AWS
-    MedService --> AWS
-    
-    subgraph Data["Data & Cache Layer"]
-        DynamoDB[Amazon DynamoDB<br/>Temporary Cache & Session Storage]
-        MockData[Mock Data Development Mode<br/>• hospitals.json<br/>• medicines.json]
-    end
-    
-    AWS --> Data
-    
-    subgraph External["External Integrations"]
-        UHI[UHI Network Beckn Protocol<br/>• Healthcare Provider Discovery<br/>• ABDM Integration]
-    end
-    
-    Data --> External
-    
-    style Mobile fill:#e1f5ff
-    style Backend fill:#fff4e1
-    style AWS fill:#ffe1f5
-    style Data fill:#e1ffe1
-    style External fill:#f5e1ff
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Mobile Application                       │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │ UI Layer     │  │ AI Agent     │  │ Local Cache  │      │
+│  │ (React       │  │ Integration  │  │ (IndexedDB)  │      │
+│  │  Native)     │  │              │  │              │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+│         │                  │                  │              │
+│  ┌──────────────────────────────────────────────────┐      │
+│  │         Service Layer (Business Logic)           │      │
+│  └──────────────────────────────────────────────────┘      │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Backend Services (Node.js)                │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │ API Gateway  │  │ Cache Layer  │  │ Data Cleanup │      │
+│  │              │  │ (Redis)      │  │ Service      │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+└─────────────────────────────────────────────────────────────┘
+                            │
+        ┌───────────────────┼───────────────────┐
+        ▼                   ▼                   ▼
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│ ABDM API     │  │ UHI API      │  │ External     │
+│              │  │              │  │ Services     │
+└──────────────┘  └──────────────┘  └──────────────┘
+                                     │
+                        ┌────────────┼────────────┐
+                        ▼            ▼            ▼
+                   ┌─────────┐ ┌─────────┐ ┌─────────┐
+                   │ Amazon  │ │ AI Agent│ │ GPS     │
+                   │ OCR     │ │ (TTS/   │ │ Service │
+                   │         │ │  STT)   │ │         │
+                   └─────────┘ └─────────┘ └─────────┘
 ```
 
-### Data Flow Diagrams
+### 1.2 Technology Stack (AWS-Optimized)
 
-#### Voice Triage Flow
+**Mobile Application:**
+- Framework: React Native with Expo (rapid prototyping)
+- State Management: Redux Toolkit
+- Local Storage: AsyncStorage
+- Offline Support: Redux Persist
+- AWS Integration: AWS Amplify SDK
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Mobile
-    participant API
-    participant Transcribe
-    participant Bedrock
-    participant UHI
-    participant DynamoDB
-    participant Polly
-    
-    User->>Mobile: Speaks symptoms (Hindi/Tamil)
-    Mobile->>API: POST /api/v1/triage {audio}
-    API->>Transcribe: Transcribe audio
-    Transcribe-->>API: Text (native language)
-    API->>Bedrock: Translate & analyze symptoms
-    Bedrock->>Bedrock: Infer specialist type
-    Bedrock->>Bedrock: Check emergency conditions
-    Bedrock->>UHI: tool_find_doctor(symptom, location)
-    
-    UHI->>UHI: Query UHI network (or mock data)
+**Backend Services (Serverless AWS):**
+- API Layer: AWS API Gateway (REST - Public, Rate-Limited)
+- Compute: AWS Lambda (Node.js runtime)
+- Cache: Amazon ElastiCache (Redis) with 24-hour TTL
+- Database: Amazon DynamoDB with TTL attribute (24-hour auto-deletion)
+- Task Scheduler: Amazon EventBridge (for cleanup jobs)
+- File Storage: Amazon S3 (prescription images with lifecycle policies)
 
-    
-    UHI-->>Bedrock: Hospital list
-    Bedrock->>Bedrock: Sort & prioritize (Govt first)
-    Bedrock-->>API: Structured response
-    API->>Polly: Convert to speech (native language)
-    Polly-->>API: Audio response
-    API-->>Mobile: {audio, hospitals, mode}
-    Mobile-->>User: Plays audio + displays results
+**AWS AI/ML Services:**
+- Foundation Models: Anthropic Claude 3 Sonnet (via Bedrock)
+- OCR: Amazon Textract (prescription image processing)
+- Translation: Amazon Translate (10+ Indian languages)
+- TTS: Amazon Polly (text-to-speech, Indian voices)
+- STT: Amazon Transcribe (speech-to-text, Indian languages)
+- Medical NLP: Amazon Comprehend Medical (symptom understanding)
+
+**AWS Infrastructure:**
+- CDN: Amazon CloudFront (static assets, low-latency)
+- Monitoring: Amazon CloudWatch (logs, metrics, alarms)
+- Secrets: AWS Secrets Manager (ABDM/UHI API keys)
+- Deployment: AWS SAM or Serverless Framework
+- Maps/Location: AWS Location Service (geocoding, routing)
+
+**Security (No Authentication Required):**
+- API Gateway: Rate limiting (100 req/min per IP) and throttling
+- S3: Pre-signed URLs for uploads (15-minute expiry)
+- DynamoDB: Automatic TTL-based deletion (24 hours)
+- CloudWatch: Request logging for abuse detection
+- WAF: AWS WAF for DDoS protection
+
+**External Services:**
+- ABDM API Integration (via Lambda)
+- UHI API Integration (via Lambda)
+- Emergency Services Integration
+
+## 2. Component Design
+
+### 2.1 Mobile Application Components
+
+#### 2.1.1 Patient Profile Module
+**Responsibility:** Manage patient demographic information
+
+**Components:**
+- `PatientProfileForm`: Input form for name, age, gender
+- `PatientProfileStore`: Redux slice for patient data
+- `ProfileValidator`: Validates patient input
+- `ProfileCleanupService`: Schedules 24-hour data deletion
+
+**Data Model:**
+```typescript
+interface PatientProfile {
+  id: string;
+  name: string;
+  age: number;
+  gender: 'male' | 'female' | 'other';
+  createdAt: Date;
+  expiresAt: Date; // createdAt + 24 hours
+}
 ```
 
-#### Vision Processing Flow
+#### 2.1.2 Symptom Input Module
+**Responsibility:** Capture and process patient symptoms
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Mobile
-    participant API
-    participant Textract
-    participant Bedrock
-    participant MedicineService
-    participant DynamoDB
-    participant Polly
-    
-    User->>Mobile: Uploads prescription photo
-    Mobile->>API: POST /api/v1/prescription {image}
-    API->>Textract: Extract text from image
-    Textract-->>API: Extracted text (medicine names)
-    API->>Bedrock: Process medicine list
-    Bedrock->>MedicineService: tool_find_medicine(medicines, location)
-    
-    loop For each medicine
-        MedicineService->>MedicineService: Map brand to generic
-        
-        MedicineService->>MedicineService: Fetch price information (or mock data)
+**Components:**
+- `SymptomTextInput`: Text-based symptom entry with language support
+- `SymptomVoiceInput`: Voice-based symptom capture using STT
+- `LanguageSelector`: Choose native language
+- `SymptomConfirmation`: Display understood symptoms for validation
+- `AIAgentService`: Interface with AI agent for translation and analysis
 
-        
-        MedicineService->>MedicineService: Calculate savings
-    end
-    
-    MedicineService-->>Bedrock: Price comparison data
-    Bedrock-->>API: Structured response
-    API->>Polly: Convert to speech (native language)
-    Polly-->>API: Audio response
-    API-->>Mobile: {audio, medicines, savings}
-    Mobile-->>User: Plays audio + displays comparison
+**Data Model:**
+```typescript
+interface SymptomInput {
+  id: string;
+  patientId: string;
+  rawText: string;
+  language: string;
+  translatedText: string; // English translation
+  timestamp: Date;
+  inputMethod: 'text' | 'voice';
+  confirmed: boolean;
+}
 ```
 
-### Technology Stack
+#### 2.1.3 Prescription Processing Module
+**Responsibility:** Handle prescription upload and extraction
 
-#### Frontend
-- Voice and camera access using native mobile APIs
+**Components:**
+- `PrescriptionUploader`: Image/text upload interface
+- `OCRService`: Amazon Textract integration
+- `MedicineExtractor`: Parse medicine names from OCR output
+- `ActiveIngredientResolver`: Map medicines to active ingredients
+- `PrescriptionStore`: Redux slice for prescription data
 
+**Data Model:**
+```typescript
+interface Prescription {
+  id: string;
+  patientId: string;
+  imageUrl?: string;
+  rawText: string;
+  medicines: Medicine[];
+  createdAt: Date;
+  expiresAt: Date;
+}
 
-#### Backend
-- **Framework**: Python FastAPI (preferred for AI/ML integration) or Node.js Express
-- **API Documentation**: OpenAPI/Swagger
-- **Environment**: AWS Lambda + API Gateway (serverless) 
-
-#### AWS Services
-- **Amazon Bedrock**: Agent orchestration with Claude 3.5 Sonnet model
-- **Amazon Transcribe**: Speech-to-text with Hindi and Tamil language support
-- **Amazon Polly**: Text-to-speech with neural voices for Hindi and Tamil
-- **Amazon Textract**: OCR for prescription image processing
-- **Amazon Location Service**: Geocoding and distance calculations
-- **Amazon DynamoDB**: NoSQL database for caching and session management
-- **AWS CloudWatch**: Basic logging for demo observability
-- **Amazon S3**: Temporary storage for uploaded images during processing
-
-
-#### External Protocols
-- **Beckn Protocol**: UHI network integration for healthcare provider discovery
-- **REST APIs**: Standard HTTP/JSON for all service communication
-
-## Components and Interfaces
-
-### 1. Mobile Application
-
-**Responsibilities**:
-- Capture voice input and prescription images
-- Display results in Emergency Mode (red) or Savings Mode (green)
-- Play audio responses
-- Handle user interactions and navigation
-- Request and manage location permissions
-
-**UI Modes**:
-
-1. **Emergency Mode (Red Theme)**: Triggered for high-risk symptoms; highlights nearby emergency-ready hospitals and shows helpline 108
-
-2. **Savings Mode (Green Theme)**: Highlights Jan Aushadhi options and cost savings on prescribed medicines
-
-3. **Normal Mode**: Default doctor discovery with both government and private options
-
-
-### 2. API Gateway Layer
-
-**Responsibilities**:
-- Route requests to appropriate backend services
-- Handle authentication and rate limiting
-- Validate request payloads
-
-**Endpoints**:
-```
-POST /api/v1/triage
-  - Body: multipart request with audio and metadata
-  - Response: TriageResponse
-
-POST /api/v1/prescription
-  - Body: multipart/form-data (image file, language, location)
-  - Response: PrescriptionResponse
-
-GET /api/v1/health
-  - Response: { status: "healthy", timestamp: ISO8601 }
+interface Medicine {
+  name: string;
+  activeIngredient: string;
+  dosage: string;
+  frequency: string;
+}
 ```
 
-### 3. Voice Triage Module
+#### 2.1.4 Location Services Module
+**Responsibility:** Capture and manage patient location
 
-**Responsibilities**:
-- Transcribe audio using Amazon Transcribe
-- Translate native language to English if needed
-- Coordinate with Bedrock Agent for symptom analysis
-- Generate audio responses using Amazon Polly
-- Validates audio clarity and requests re-recording if needed
+**Components:**
+- `LocationCapture`: GPS-based location fetching
+- `ManualLocationInput`: Manual location entry
+- `LocationValidator`: Validate coordinates
+- `LocationStore`: Redux slice for location data
 
-**Processing Flow (High-Level)**:
-1. Transcribe spoken symptoms in the user’s native language
-2. Analyze symptoms and infer specialist and urgency
-3. Discover nearby government and private hospitals via UHI
-4. Respond with voice and visual guidance in the user’s language
+**Data Model:**
+```typescript
+interface Location {
+  id: string;
+  patientId: string;
+  latitude: number;
+  longitude: number;
+  address: string;
+  source: 'gps' | 'manual';
+  createdAt: Date;
+  expiresAt: Date;
+}
+```
+
+#### 2.1.5 Doctor Recommendation Module
+**Responsibility:** Find and display nearby doctors/specialists
+
+**Components:**
+- `DoctorSearch`: Search interface
+- `DoctorList`: Display search results
+- `DoctorCard`: Individual doctor information
+- `AppointmentBooking`: Book appointments
+- `AIAgentAnalyzer`: Analyze symptoms to recommend specialists
+- `ABDMService`: Query ABDM for doctor information
+
+**Data Model:**
+```typescript
+interface Doctor {
+  id: string;
+  name: string;
+  specialization: string[];
+  hospitalName: string;
+  hospitalType: 'government' | 'private';
+  distance: number; // in km
+  consultationFee: number;
+  availability: Availability[];
+  rating: number;
+  location: {
+    latitude: number;
+    longitude: number;
+    address: string;
+  };
+}
+
+interface Availability {
+  day: string;
+  slots: TimeSlot[];
+}
+
+interface TimeSlot {
+  startTime: string;
+  endTime: string;
+  available: boolean;
+}
+```
+
+#### 2.1.6 Medicine Search Module
+**Responsibility:** Find affordable medicine alternatives
+
+**Components:**
+- `MedicineSearch`: Search interface
+- `MedicineList`: Display results with prices
+- `MedicineDetail`: Detailed medicine information
+- `PharmacyLocator`: Find nearby Jan Aushadhi Kendras and pharmacies
+- `PriceComparator`: Compare prices across pharmacies
+
+**Data Model:**
+```typescript
+interface MedicineResult {
+  id: string;
+  name: string;
+  activeIngredient: string;
+  type: 'generic' | 'branded';
+  price: number;
+  pharmacy: Pharmacy;
+  chemicalComposition: string;
+  sideEffects: string[];
+  dosageInfo: string;
+}
+
+interface Pharmacy {
+  id: string;
+  name: string;
+  type: 'jan_aushadhi' | 'regular';
+  distance: number;
+  location: {
+    latitude: number;
+    longitude: number;
+    address: string;
+  };
+  contactNumber: string;
+}
+```
+
+#### 2.1.7 Emergency Module
+**Responsibility:** Handle emergency situations
+
+**Components:**
+- `EmergencyModeToggle`: Manual emergency activation
+- `EmergencyThemeProvider`: Red theme for emergency mode
+- `EmergencyAnalyzer`: AI-based emergency detection
+- `HospitalBedFinder`: Find hospitals with available beds
+- `EmergencyServiceConnector`: Contact emergency services
+- `FacilityMatcher`: Match required facilities to hospitals
+
+**Data Model:**
+```typescript
+interface EmergencyRequest {
+  id: string;
+  patientId: string;
+  symptoms: string;
+  isEmergency: boolean;
+  requiredFacilities: string[];
+  timestamp: Date;
+}
+
+interface Hospital {
+  id: string;
+  name: string;
+  type: 'government' | 'private';
+  distance: number;
+  availableBeds: number;
+  facilities: Facility[];
+  emergencyContact: string;
+  location: {
+    latitude: number;
+    longitude: number;
+    address: string;
+  };
+}
+
+interface Facility {
+  name: string;
+  available: boolean;
+  count: number;
+}
+```
+
+### 2.2 Backend Services
+
+#### 2.2.1 API Gateway Service
+**Responsibility:** Route requests and handle authentication
+
+**Endpoints:**
+- `POST /api/patients` - Create patient profile
+- `PUT /api/patients/:id` - Update patient profile
+- `POST /api/symptoms` - Submit symptoms
+- `POST /api/prescriptions` - Upload prescription
+- `POST /api/prescriptions/ocr` - Process prescription image
+- `GET /api/doctors` - Search doctors
+- `POST /api/appointments` - Book appointment
+- `GET /api/medicines` - Search medicines
+- `GET /api/pharmacies` - Find pharmacies
+- `POST /api/emergency` - Initiate emergency request
+- `GET /api/hospitals` - Find hospitals with beds
+
+#### 2.2.2 Cache Service (Amazon ElastiCache)
+**Responsibility:** Cache API responses using Amazon ElastiCache (Redis)
+
+**Implementation:**
+- Use ElastiCache Redis cluster 
+- Within code, we connect to the Redis cluster
+- On fetching an API response from the User, the ABDM or the UHI API, we will:
+  - Cache it in Redis if it is a fresh value (check -> fetch from API -> store -> return)
+  - Fetch it directly from the cache if available (check -> fetch from cache -> return)
+
+**Cache Keys Strategy:**
+
+- Cache keys will be named according to the source/entity associated with the data. Example:
+  - `doctors:{lat}:{lng}:{specialization}` - Doctor search results
+  - `medicines:{activeIngredient}:{lat}:{lng}` - Medicine search results
+  - `hospitals:{lat}:{lng}:{facilities}` - Hospital search results
+  - `abdm:response:{endpoint}:{hash}` - ABDM API responses
+  - `uhi:response:{endpoint}:{hash}` - UHI API responses
+  - `translation:{hash}:{targetLang}` - Translation cache
 
 
-**Multilingual Support**:
-- Supported input languages: Hindi (hi-IN), Tamil (ta-IN), and other Indian languages supported by Amazon Transcribe
-- Internal translation handled transparently for processing
-- All responses delivered back in the user’s native language
-- All error messages and clarifying questions presented in user's native language
+#### 2.2.3 Data Cleanup Service (AWS-Native)
+**Responsibility:** Automatically delete data after 24 hours using AWS services
 
-### 4. Vision Module
+**DynamoDB TTL Configuration:**
 
-**Responsibilities**:
-- Extract text from prescription images using Amazon Textract
-- Validate image quality (resolution, lighting, blur)
-- Coordinate with Bedrock Agent for medicine processing
+To automatically delete the data, we can use:
+- Time to live (TTL) property of DynamoDB
+- Expiration property configuration of S3 bucker
 
-**Processing Flow**:
-1. Validates prescription image clarity 
-2. If image quality is poor (blurry, dark, or low resolution), return error with tips for better photo
-3. Temporarily process image for OCR and discard after extraction
-4. Extract text using Amazon Textract detect_document_text
-5. Parse extracted text to identify medicine names (both brand and generic)
-6. If no medicine names detected, request clearer image
-7. Invoke Bedrock Agent with medicine list and location
-8. Clean up temporary S3 storage immediately after processing
-9. Return PrescriptionResponse with medicines, savings, and locations
+#### 2.2.4 ABDM Integration Service
+**Responsibility:** Interface with ABDM APIs
 
-### 5. Bedrock Agent Orchestrator
+**Methods:**
+- `searchDoctors(location, specialization)` - Find doctors
+- `searchHospitals(location, facilities)` - Find hospitals
+- `checkBedAvailability(hospitalId)` - Check bed availability
+- `bookAppointment(doctorId, patientId, slot)` - Book appointment
 
-**Responsibilities**:
-- Coordinate multi-step workflows
-- Invoke action groups (tool_find_doctor, tool_find_medicine)
-- Maintain conversation context across session
-- Determine emergency conditions based on symptom analysis
-- Classify symptoms into specialist types
+#### 2.2.5 UHI Integration Service
+**Responsibility:** Interface with UHI APIs
 
-**Supported Specialist Types** (minimum 10 categories):
-1. General Physician (default for unclear symptoms)
-2. Cardiologist (heart-related symptoms)
-3. Dermatologist (skin conditions)
-4. Pediatrician (children's health)
-5. Gynecologist (women's health)
-6. Orthopedic (bone and joint issues)
-7. ENT (Ear, Nose, Throat)
-8. Ophthalmologist (eye conditions)
-9. Dentist (dental issues)
-10. Psychiatrist (mental health)
-11. Gastroenterologist (digestive system)
-12. Neurologist (nervous system)
+**Methods:**
+- `searchHealthcareProviders(location, type)` - Find providers
+- `getServiceAvailability(providerId)` - Check availability
+- `initiateEmergencyRequest(location, requirements)` - Emergency services
 
-**Emergency Condition Detection**:
-The Bedrock Agent activates Emergency_Mode when symptoms indicate:
-- Chest pain or pressure (potential heart attack)
-- Severe bleeding or hemorrhage
-- Difficulty breathing or shortness of breath
-- Loss of consciousness or fainting
-- Severe head injury
-- Stroke symptoms (facial drooping, arm weakness, speech difficulty)
-- Severe allergic reactions
-- Poisoning or overdose
-- Severe burns
-- Severe abdominal pain
+#### 2.2.6 OCR Service (Amazon Textract)
+**Responsibility:** Extract text from prescription images using Amazon Textract
 
+**Implementation:**
+```typescript
+import { TextractClient, DetectDocumentTextCommand, AnalyzeDocumentCommand } from "@aws-sdk/client-textract";
 
-### 6. UHI Discovery Service
+class TextractOCRService {
+  private textract: TextractClient;
 
-**Responsibilities**:
-- Search UHI network using Beckn Protocol
-- Prioritize government hospitals over private clinics
-- Calculate distances using Amazon Location Service
-- Handle location permissions and manual entry fallback
+  constructor() {
+    this.textract = new TextractClient({ region: "us-east-1" });
+  }
 
-**Location Handling**:
-1. On application start, request location permissions from user
-2. If permissions granted, use Amazon Location Service to get GPS coordinates
-3. If permissions denied, prompt for manual location entry (city/district/pincode)
-4. Cache location in session for subsequent requests
-5. Use road distance (not straight-line) for all distance calculations
+  async extractPrescription(s3Key: string): Promise<PrescriptionData> {
+    // Use DetectDocumentText for simple text extraction
+    const command = new DetectDocumentTextCommand({
+      Document: {
+        S3Object: {
+          Bucket: process.env.S3_BUCKET_NAME,
+          Name: s3Key
+        }
+      }
+    });
+    
+    const result = await this.textract.send(command);
+    const extractedText = this.concatenateBlocks(result.Blocks);
+    
+    // Use Bedrock Agent to parse medicine names from extracted text
+    const medicines = await bedrockAgent.extractMedicines(extractedText);
+    
+    return {
+      rawText: extractedText,
+      medicines: medicines,
+      confidence: this.calculateConfidence(result.Blocks)
+    };
+  }
 
-**Service Logic**:
-1. Query UHI network for matching providers
-2. Prioritize PMJAY-enabled government hospitals
-3. Sort results by proximity and emergency capability
-4. Return top relevant options to the user
+  async extractPrescriptionAdvanced(s3Key: string): Promise<PrescriptionData> {
+    // Use AnalyzeDocument for structured data extraction (tables, forms)
+    const command = new AnalyzeDocumentCommand({
+      Document: {
+        S3Object: {
+          Bucket: process.env.S3_BUCKET_NAME,
+          Name: s3Key
+        }
+      },
+      FeatureTypes: ["TABLES", "FORMS"]
+    });
+    
+    const result = await this.textract.send(command);
+    return this.parseStructuredPrescription(result);
+  }
 
+  private concatenateBlocks(blocks: any[]): string {
+    if (!blocks) return '';
+    
+    return blocks
+      .filter(block => block.BlockType === 'LINE')
+      .map(block => block.Text)
+      .join('\n');
+  }
 
-### 7. Medicine Price Service
+  private calculateConfidence(blocks: any[]): number {
+    if (!blocks || blocks.length === 0) return 0;
+    
+    const confidences = blocks
+      .filter(block => block.Confidence)
+      .map(block => block.Confidence);
+    
+    return confidences.reduce((a, b) => a + b, 0) / confidences.length;
+  }
 
-**Responsibilities**:
-- Map brand names to generic salt names
-- Fetch prices from multiple sources
-- Calculate savings percentages
-- Find nearest Jan Aushadhi Kendras
-- Maintains a curated mapping of common brand-to-generic medicines
+  private parseStructuredPrescription(result: any): PrescriptionData {
+    // Parse tables and forms from prescription
+    // Extract: Medicine name, dosage, frequency, duration
+    const medicines = [];
+    
+    // Process TABLES feature type
+    if (result.Blocks) {
+      // Implementation to extract structured data
+    }
+    
+    return {
+      rawText: this.concatenateBlocks(result.Blocks),
+      medicines: medicines,
+      confidence: this.calculateConfidence(result.Blocks)
+    };
+  }
+}
 
+interface PrescriptionData {
+  rawText: string;
+  medicines: Medicine[];
+  confidence: number;
+}
+```
 
-**Service Logic**:
-1. For each medicine name, attempt to map brand to generic salt name using internal database
-2. If medicine is already a generic name, use it directly without mapping
-3. If medicine name is ambiguous (multiple possible matches), return all options for user selection
-4. If medicine name is unrecognized, request clarification from user
-5. Fetch price information from available data sources or mock data
-6. Find nearest Jan Aushadhi Kendras using location service (maximum 3 locations)
-7. Calculate savings percentage: ((brand_price - jan_aushadhi_price) / brand_price) * 100
-8. If medicine unavailable at Jan Aushadhi, indicate unavailability and show only brand prices
-9. Return list of MedicineComparison objects with top 3 Jan Aushadhi locations per medicine
+**S3 Pre-Signed URL for Uploads:**
+```typescript
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
+async function generateUploadUrl(fileName: string): Promise<string> {
+  const s3Client = new S3Client({ region: "us-east-1" });
+  const key = `prescriptions/${Date.now()}-${fileName}`;
+  
+  const command = new PutObjectCommand({
+    Bucket: process.env.S3_BUCKET_NAME,
+    Key: key,
+    ContentType: 'image/jpeg',
+    // Metadata for automatic deletion
+    Metadata: {
+      'upload-time': Date.now().toString()
+    }
+  });
+  
+  // URL expires in 15 minutes
+  const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 900 });
+  
+  return uploadUrl;
+}
+```
 
-### System Guarantees
-- Always prioritizes government hospitals when available
-- Escalates potentially dangerous symptoms to urgent care
-- Never stores raw audio or prescription images
-- Always presents generic medicine savings when available
-- Responds in the user’s native language
+#### 2.2.7 Amazon Bedrock Agent Service
+**Responsibility:** Orchestrate AI tasks using Amazon Bedrock Agents
 
+**Amazon Bedrock Agents Configuration:**
 
+**Agent 1: Symptom Analysis Agent**
+- Foundation Model: Anthropic Claude 3 Sonnet
+- Action Groups:
+  - `analyzeSymptoms`: Analyze patient symptoms and determine severity
+  - `detectEmergency`: Identify if symptoms indicate emergency
+  - `recommendSpecialist`: Suggest appropriate medical specialist
+- Knowledge Base: Medical symptom database (optional)
+- Guardrails: Medical content filtering
 
-## Error Handling
-- Errors are communicated clearly in the user’s native language
-- The system guides users on how to retry or correct inputs
-- In urgent scenarios, emergency helpline information is shown immediately
-- The system prioritizes showing partial results over failing completely
+**Agent 2: Medicine Extraction Agent**
+- Foundation Model: Anthropic Claude 3 Sonnet
+- Action Groups:
+  - `extractMedicines`: Parse prescription text for medicine names
+  - `identifyActiveIngredients`: Map medicines to active ingredients
+  - `findGenericAlternatives`: Suggest generic equivalents
+- Knowledge Base: Indian Pharmacopoeia, Jan Aushadhi medicine list
 
+**Agent 3: Translation & Communication Agent**
+- Foundation Model: Anthropic Claude 3 Sonnet
+- Action Groups:
+  - `translateToEnglish`: Translate Indian languages to English
+  - `translateFromEnglish`: Translate English to Indian languages
+  - `simplifyMedicalTerms`: Convert medical jargon to simple language
+- Integration: Amazon Translate for additional language support
 
-### Error Handling Strategies
+**Agent 4: Emergency Coordinator Agent**
+- Foundation Model: Anthropic Claude 3 Sonnet
+- Action Groups:
+  - `assessEmergency`: Rapid emergency assessment
+  - `determineFacilities`: Identify required hospital facilities
+  - `prioritizeHospitals`: Rank hospitals by suitability
+- Optimized for: Low-latency responses (<5 seconds)
 
-1. **Graceful Degradation**
-   - If TTS fails, return text response only
-   - If cache is unavailable, proceed with direct API calls
-   - If location service fails, allow manual location entry
+## 3. Data Flow Diagrams
 
-2. **User Guidance**
-   - Provide specific instructions for fixing input errors
-   - Suggest alternative actions when searches return no results
-   - Offer emergency helpline numbers when system is unavailable
+### 3.1 Doctor Search Flow
 
-3. **Retry Logic**
-   - Automatic retry with exponential backoff for transient failures
-   - User-initiated retry option for all errors
-   - Maximum 3 automatic retries before requiring user action
+```
+Patient → Enter Symptoms → AI Agent Analysis → Translate to English
+                                    ↓
+                          Determine Specialist Type
+                                    ↓
+                          Query Location Service
+                                    ↓
+                    Check Cache for Doctor Results
+                                    ↓
+                          Cache Miss? Query ABDM
+                                    ↓
+                          Filter by Specialization
+                                    ↓
+                          Sort by Distance & Type
+                                    ↓
+                    Prioritize Government Facilities
+                                    ↓
+                          Cache Results (24h TTL)
+                                    ↓
+                          Return to Patient
+```
 
-4. **Logging and Monitoring**
-   - Log all errors with full context for debugging
-   - Track error rates by category
-   - Alert on error rate thresholds (>5% of requests)
+### 3.2 Medicine Search Flow
 
-### Emergency Mode Error Handling
+```
+Patient → Upload Prescription → OCR Processing → Extract Text
+                                    ↓
+                          AI Agent Extraction
+                                    ↓
+                          Identify Medicine Names
+                                    ↓
+                          Map to Active Ingredients
+                                    ↓
+                          Query Location Service
+                                    ↓
+                    Check Cache for Medicine Results
+                                    ↓
+                    Search Jan Aushadhi Kendras First
+                                    ↓
+                    No Results? Search Regular Pharmacies
+                                    ↓
+                          Sort by Price (Ascending)
+                                    ↓
+                          Cache Results (24h TTL)
+                                    ↓
+                          Return to Patient
+```
 
-When in Emergency_Mode, error handling should be optimized for speed:
-- Skip optional processing steps
-- Provide emergency helpline immediately in error messages
-- Reduce retry attempts to 1 to avoid delays
-- Prioritize showing any available results over perfect results
+### 3.3 Emergency Flow
 
-## Testing Strategy
+```
+Patient → Activate Emergency Mode → Enter Symptoms → AI Agent Analysis
+                                                            ↓
+                                                  Confirm Emergency?
+                                                            ↓
+                                                    Yes → Switch to Red Theme
+                                                            ↓
+                                                  Determine Required Facilities
+                                                            ↓
+                                                  Query Location Service
+                                                            ↓
+                                                  Query ABDM + UHI (Parallel)
+                                                            ↓
+                                                  Filter by Facilities
+                                                            ↓
+                                                  Check Bed Availability
+                                                            ↓
+                                                  Sort by Distance
+                                                            ↓
+                                                  Contact Emergency Services
+                                                            ↓
+                                                  Return Results (< 30s)
+```
 
-- Manual end-to-end testing using mock data
-- Simulated emergency and non-emergency scenarios
-- Demo validation with Hindi/Tamil voice inputs and handwritten prescriptions
+## 4. Performance Optimization
 
+### 4.1 Low-Bandwidth Optimization
 
-### Environment Configuration
+**Strategies:**
+1. **Data Compression:** Gzip all API responses
+2. **Image Optimization:** Compress prescription images before upload
+3. **Lazy Loading:** Load UI components on demand
+4. **Pagination:** Limit results to 10-20 items per page
+5. **Minimal Payloads:** Return only necessary fields
+6. **Progressive Enhancement:** Basic functionality works on 2G
 
-**Development Environment**:
-- Use mock data (hospitals.json, medicines.json) for rapid development
-- Local DynamoDB for caching
-- Reduced property test iterations (20)
-- Debug logging enabled for troubleshooting
+**Implementation:**
+```typescript
+// API Response Compression
+app.use(compression({
+  level: 6,
+  threshold: 1024 // Only compress responses > 1KB
+}));
 
-**Staging Environment**:
-- Mix of mock and real AWS services for testing
-- Real DynamoDB with test data
-- Full property test suite
-- Standard logging level
+// Image Compression
+const compressImage = async (image: File): Promise<Blob> => {
+  return await imageCompression(image, {
+    maxSizeMB: 0.5,
+    maxWidthOrHeight: 1920,
+    useWebWorker: true
+  });
+};
+```
 
-**Production Environment**:
-- All real AWS services
-- Real UHI network integration
-- Production DynamoDB with auto-scaling
-- CloudWatch monitoring and alarms enabled
+### 4.2 Caching Strategy
 
-### Scalability Considerations
+**Multi-Level Caching:**
+1. **Client-Side Cache:** IndexedDB for offline access
+2. **CDN Cache:** Static assets (images, scripts)
+3. **Server-Side Cache:** Redis for API responses
+4. **API Response Cache:** 24-hour TTL
 
-1. **Lambda Concurrency**: Set reserved concurrency for critical functions
-2. **DynamoDB**: Use on-demand billing for unpredictable traffic
-3. **API Gateway**: Enable throttling (1000 requests/second per user)
-4. **Bedrock**: Monitor token usage and implement rate limiting
-5. **S3**: Use lifecycle policies to delete temp images after 1 day
+**Cache Invalidation:**
+- Time-based: Automatic expiry after 24 hours
+- Event-based: Invalidate on data updates
+- Manual: Admin can force cache refresh
 
-### Cost Optimization
+### 4.3 Emergency Mode Optimization
 
-1. **Caching**: Aggressive caching reduces AWS service calls
-2. **Mock Data**: Use in development to avoid AWS costs
-3. **Batch Processing**: Batch multiple medicines in single Bedrock call
-4. **Image Compression**: Compress prescription images before upload
-5. **Audio Streaming**: Stream TTS audio instead of storing in S3
+**Priority Optimizations:**
+1. **Parallel API Calls:** Query ABDM and UHI simultaneously
+2. **Reduced Validation:** Skip non-critical validations
+3. **Prioritized Network:** Mark emergency requests as high priority
+4. **Preloaded Data:** Cache common emergency facilities
+5. **Timeout Handling:** 30-second hard timeout
+
+```typescript
+const emergencySearch = async (symptoms: string, location: Location) => {
+  const timeout = 30000; // 30 seconds
+  
+  const [abdmResults, uhiResults] = await Promise.race([
+    Promise.all([
+      abdmService.searchHospitals(location, facilities),
+      uhiService.searchHealthcareProviders(location, 'emergency')
+    ]),
+    new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Timeout')), timeout)
+    )
+  ]);
+  
+  return mergeAndSortResults(abdmResults, uhiResults);
+};
+```
+
+## 5. Security and Privacy
+
+### 5.1 Data Encryption
+
+**In Transit:**
+- TLS 1.3 for all API communications
+- Certificate pinning in mobile app
+
+**At Rest:**
+- AES-256 encryption for database
+- Encrypted S3 buckets for prescription images
+
+### 5.2 Data Retention Policy
+
+**Automatic Deletion:**
+```typescript
+interface DataRetentionPolicy {
+  patientProfiles: '24 hours';
+  prescriptions: '24 hours';
+  prescriptionImages: '24 hours';
+  locations: '24 hours';
+  symptoms: '24 hours';
+  searchHistory: '24 hours';
+  cacheData: '24 hours';
+}
+```
+
+**Implementation:**
+- Database triggers for automatic deletion
+- Scheduled cleanup jobs (hourly)
+- Audit logs for compliance
+
+### 5.3 API Security (No User Authentication)
+
+**Public Access Design:**
+- No user authentication required (removes barrier to healthcare access)
+- Focus on rate limiting and abuse prevention
+- Session-less architecture for simplicity
+
+**AWS API Gateway Security:**
+```typescript
+// API Gateway configuration
+const apiGatewayConfig = {
+  throttle: {
+    rateLimit: 100,  // requests per second per IP
+    burstLimit: 200  // maximum concurrent requests
+  },
+  quota: {
+    limit: 10000,    // requests per day per IP
+    period: 'DAY'
+  }
+};
+```
+
+**AWS WAF (Web Application Firewall):**
+- Rate-based rules: Block IPs exceeding 1000 requests/5 minutes
+- Geo-blocking: Restrict to India region (optional)
+- SQL injection protection
+- XSS protection
+- Bot detection and mitigation
+
+**CloudWatch Monitoring:**
+```typescript
+// Alert on suspicious patterns
+const cloudWatchAlarm = {
+  MetricName: 'Count',
+  Namespace: 'AWS/ApiGateway',
+  Statistic: 'Sum',
+  Period: 300, // 5 minutes
+  EvaluationPeriods: 1,
+  Threshold: 5000, // Alert if > 5000 requests in 5 min from single IP
+  ComparisonOperator: 'GreaterThanThreshold'
+};
+```
+
+**S3 Security:**
+- Pre-signed URLs with 15-minute expiry for prescription uploads
+- No public read access
+- Server-side encryption (SSE-S3)
+- Automatic deletion after 24 hours via lifecycle policy
+
+**DynamoDB Security:**
+- No direct public access (only via Lambda)
+- Encryption at rest enabled
+- Point-in-time recovery enabled
+- Automatic TTL-based deletion
+
+**Lambda Security:**
+- Minimal IAM permissions (principle of least privilege)
+- VPC configuration for ElastiCache access
+- Environment variables in AWS Secrets Manager
+- X-Ray tracing for debugging
+
+## 6. Error Handling
+
+### 6.1 Network Errors
+
+**Strategies:**
+1. **Retry Logic:** Exponential backoff for failed requests
+2. **Offline Queue:** Queue requests when offline
+3. **Graceful Degradation:** Show cached data when API fails
+4. **User Feedback:** Clear error messages
+
+```typescript
+const apiCall = async (endpoint: string, retries = 3): Promise<any> => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fetch(endpoint);
+    } catch (error) {
+      if (i === retries - 1) throw error;
+      await sleep(Math.pow(2, i) * 1000); // Exponential backoff
+    }
+  }
+};
+```
+
+### 6.2 AI Agent Errors
+
+**Fallback Strategies:**
+1. **Translation Failure:** Show original text with warning
+2. **Analysis Failure:** Prompt user to select specialist manually
+3. **Emergency Detection Failure:** Default to emergency mode for safety
+4. **TTS/STT Failure:** Fall back to text input/output
+
+### 6.3 External Service Errors
+
+**ABDM/UHI API Failures:**
+- Return cached results if available
+- Show partial results from available APIs
+- Notify user of limited data
+- Provide manual search option
+
+## 7. Testing Strategy
+
+### 7.1 Unit Testing
+
+**Coverage Requirements:**
+- Minimum 80% code coverage
+- All business logic components
+- All utility functions
+- All data transformations
+
+**Framework:** Jest + React Native Testing Library
+
+### 7.2 Integration Testing
+
+**Test Scenarios:**
+- ABDM API integration
+- UHI API integration
+- OCR service integration
+- AI Agent integration
+- Cache service integration
+
+**Framework:** Jest + Supertest
+
+### 7.3 End-to-End Testing
+
+**Critical User Flows:**
+1. Complete doctor search and booking
+2. Complete medicine search
+3. Emergency mode activation and hospital search
+4. Prescription upload and processing
+5. Multilingual symptom input
+
+**Framework:** Detox (React Native)
+
+### 7.4 Performance Testing
+
+**Metrics:**
+- API response time < 2 seconds (normal mode)
+- Emergency search < 30 seconds
+- App launch time < 3 seconds
+- Search results render < 1 second
+
+**Tools:** Lighthouse, React Native Performance Monitor
+
+### 7.5 Accessibility Testing
+
+**Requirements:**
+- Screen reader support
+- High contrast mode
+- Large text support
+- Voice navigation
+
+## 8. Deployment Strategy
+
+### 8.1 Mobile App Deployment
+
+**Platforms:**
+- iOS: App Store
+- Android: Google Play Store
+
+**Release Process:**
+1. Beta testing with 100 users
+2. Staged rollout (10% → 50% → 100%)
+3. Monitor crash reports and feedback
+4. Hotfix capability for critical issues
+
+### 8.2 Backend Deployment (AWS Serverless)
+
+**Infrastructure (Serverless):**
+- AWS Lambda functions (auto-scaling, pay-per-use)
+- API Gateway (managed, auto-scaling)
+- DynamoDB (serverless database)
+- ElastiCache (managed Redis)
+- S3 (object storage)
+- No servers to manage!
+
+**Infrastructure as Code (AWS SAM):**
+```yaml
+# template.yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Resources:
+  SahayakAPI:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Cors:
+        AllowOrigin: "'*'"
+      ThrottleSettings:
+        RateLimit: 100
+        BurstLimit: 200
+
+  SymptomAnalysisFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs18.x
+      Handler: symptom-analysis.handler
+      Timeout: 30
+      MemorySize: 512
+      Environment:
+        Variables:
+          BEDROCK_AGENT_ID: !Ref SymptomAgentId
+          DYNAMODB_TABLE: !Ref PatientDataTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PatientDataTable
+        - Statement:
+          - Effect: Allow
+            Action:
+              - bedrock:InvokeAgent
+            Resource: '*'
+
+  PatientDataTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification:
+        Enabled: true
+        AttributeName: ttl
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+```
+
+**CI/CD Pipeline (AWS CodePipeline):**
+```yaml
+# buildspec.yml
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      nodejs: 18
+  pre_build:
+    commands:
+      - npm install
+      - npm run test
+  build:
+    commands:
+      - sam build
+      - sam package --output-template-file packaged.yaml
+  post_build:
+    commands:
+      - sam deploy --template-file packaged.yaml --stack-name sahayak-prod
+```
+
+**Deployment Stages:**
+1. Code commit → GitHub/CodeCommit
+2. CodeBuild runs tests
+3. SAM builds and packages Lambda functions
+4. Deploy to staging (automatic)
+5. Run integration tests
+6. Deploy to production (manual approval)
+7. CloudWatch monitors metrics
+
+**Multi-Region Deployment (Optional):**
+- Primary: ap-south-1 (Mumbai)
+- Backup: ap-southeast-1 (Singapore)
+- Route53 health checks for failover
+- DynamoDB Global Tables for replication
+
+### 8.3 Monitoring and Logging (AWS-Native)
+
+**CloudWatch Metrics:**
+- Lambda invocations, duration, errors
+- API Gateway requests, latency, 4xx/5xx errors
+- DynamoDB read/write capacity, throttles
+- ElastiCache CPU, memory, cache hits
+- Bedrock Agent invocations, latency
+
+**CloudWatch Dashboards:**
+```typescript
+const dashboard = {
+  widgets: [
+    {
+      type: 'metric',
+      properties: {
+        metrics: [
+          ['AWS/Lambda', 'Duration', { stat: 'Average' }],
+          ['AWS/ApiGateway', 'Latency', { stat: 'p99' }],
+          ['AWS/DynamoDB', 'UserErrors', { stat: 'Sum' }]
+        ],
+        period: 300,
+        stat: 'Average',
+        region: 'ap-south-1',
+        title: 'Sahayak Performance Metrics'
+      }
+    }
+  ]
+};
+```
+
+**CloudWatch Alarms:**
+- Lambda errors > 10 in 5 minutes → SNS notification
+- API Gateway 5xx errors > 50 in 5 minutes → SNS notification
+- DynamoDB throttling → Auto-scale capacity
+- Emergency endpoint latency > 5 seconds → SNS notification
+
+**AWS X-Ray Tracing:**
+- End-to-end request tracing
+- Service map visualization
+- Performance bottleneck identification
+- Error analysis
+
+**CloudWatch Logs Insights:**
+```sql
+-- Find slow Bedrock Agent calls
+fields @timestamp, @message
+| filter @message like /Bedrock/
+| filter duration > 5000
+| sort @timestamp desc
+| limit 20
+```
+
+**Cost Monitoring:**
+- AWS Cost Explorer for daily cost tracking
+- Budget alerts for unexpected spending
+- Lambda cost optimization (right-sizing memory)
+- S3 lifecycle policies to reduce storage costs
+
+## 9. Future Enhancements
+
+### 9.1 Phase 2 Features
+- Telemedicine video consultations
+- Medicine delivery integration
+- Health records management (with user consent)
+- Insurance claim assistance
+- Medication reminders
+
+### 9.2 Technical Improvements
+- Progressive Web App (PWA) version
+- Offline-first architecture
+- AI model optimization for edge devices
+- Blockchain for health records
+- Advanced analytics and insights
+
+## 10. Correctness Properties
+
+### 10.1 Data Integrity Properties
+
+**Property 1.1: Data Expiration**
+- **Description:** All patient data must be automatically deleted after exactly 24 hours
+- **Validation:** For any data record with timestamp T, the record must not exist at T + 24 hours + 1 minute
+- **Test Strategy:** Property-based test with random timestamps
+
+**Property 1.2: Location Accuracy**
+- **Description:** GPS coordinates must be valid (latitude: -90 to 90, longitude: -180 to 180)
+- **Validation:** All location data must pass coordinate validation
+- **Test Strategy:** Property-based test with boundary values
+
+### 10.2 Search Result Properties
+
+**Property 2.1: Distance Sorting**
+- **Description:** Search results must be sorted by distance in ascending order
+- **Validation:** For any two consecutive results R1 and R2, distance(R1) ≤ distance(R2)
+- **Test Strategy:** Property-based test with random locations
+
+**Property 2.2: Government Priority**
+- **Description:** Government facilities must appear before private facilities at equal distances
+- **Validation:** For results at same distance, government type comes first
+- **Test Strategy:** Property-based test with mixed facility types
+
+**Property 2.3: Price Sorting**
+- **Description:** Medicine results must be sorted by price in ascending order
+- **Validation:** For any two consecutive medicines M1 and M2, price(M1) ≤ price(M2)
+- **Test Strategy:** Property-based test with random prices
+
+### 10.3 Emergency Mode Properties
+
+**Property 3.1: Emergency Response Time**
+- **Description:** Emergency search must complete within 30 seconds
+- **Validation:** Time from emergency activation to results display ≤ 30 seconds
+- **Test Strategy:** Performance test with timeout monitoring
+
+**Property 3.2: Facility Matching**
+- **Description:** Emergency results must only include hospitals with required facilities
+- **Validation:** All returned hospitals must have facilities matching emergency requirements
+- **Test Strategy:** Property-based test with various facility combinations
+
+### 10.4 Cache Properties
+
+**Property 4.1: Cache Consistency**
+- **Description:** Cached data must match source data at time of caching
+- **Validation:** Cache entry equals API response at cache time
+- **Test Strategy:** Property-based test comparing cache and source
+
+**Property 4.2: Cache Expiration**
+- **Description:** Cache entries must expire after 24 hours
+- **Validation:** Cache entry with timestamp T must not be retrievable at T + 24 hours + 1 minute
+- **Test Strategy:** Property-based test with time manipulation
+
+### 10.5 Translation Properties
+
+**Property 5.1: Translation Reversibility**
+- **Description:** Translating text from language A to B and back to A should preserve meaning
+- **Validation:** Semantic similarity score > 0.8 after round-trip translation
+- **Test Strategy:** Property-based test with sample medical terms
+
+**Property 5.2: Language Support**
+- **Description:** All supported Indian languages must be translatable to English
+- **Validation:** Translation succeeds for all supported language codes
+- **Test Strategy:** Property-based test with language code enumeration
+
+### 10.6 Prescription Processing Properties
+
+**Property 6.1: OCR Accuracy**
+- **Description:** OCR must extract text with >90% accuracy for clear images
+- **Validation:** Extracted text matches ground truth with >90% similarity
+- **Test Strategy:** Property-based test with sample prescriptions
+
+**Property 6.2: Medicine Extraction**
+- **Description:** All medicine names in prescription must be extracted
+- **Validation:** Extracted medicines list contains all medicines from prescription
+- **Test Strategy:** Property-based test with known prescriptions
+
+## 11. Implementation Phases (2-Day Hackathon with AWS)
+
+### Day 1: Morning (Hours 0-4) - AWS Foundation & Core Setup
+**Goal:** Set up AWS infrastructure and basic patient flow
+
+**Tasks:**
+- Initialize React Native project with Expo and AWS Amplify
+- Set up AWS account and configure AWS CLI
+- Create AWS SAM template for Lambda functions
+- Deploy DynamoDB table with TTL enabled
+- Create patient profile form (name, age, gender)
+- Implement basic location capture (GPS or manual)
+- Set up mock ABDM/UHI API responses for testing
+- Deploy first Lambda function (patient data storage)
+
+**AWS Services Used:**
+- AWS Amplify (mobile app setup)
+- AWS Lambda (serverless functions)
+- Amazon DynamoDB (data storage with TTL)
+- AWS SAM (infrastructure as code)
+
+**Deliverable:** App can capture patient details and location, store in DynamoDB
+
+### Day 1: Afternoon (Hours 4-8) - Bedrock Agents & Doctor Search
+**Goal:** Enable symptom entry and doctor recommendations using Bedrock
+
+**Tasks:**
+- Build symptom input form (text only, English)
+- Create Amazon Bedrock Agent for symptom analysis
+- Configure Claude 3 Sonnet model in Bedrock
+- Implement doctor search Lambda function with mock data
+- Create doctor list UI with distance sorting
+- Add government facility prioritization logic
+- Set up ElastiCache Redis for caching (or use DynamoDB for simplicity)
+
+**AWS Services Used:**
+- Amazon Bedrock Agents (symptom analysis)
+- Anthropic Claude 3 Sonnet (foundation model)
+- AWS Lambda (doctor search logic)
+- Amazon ElastiCache or DynamoDB (caching)
+
+**Deliverable:** Users can enter symptoms and see nearby doctors via Bedrock Agent
+
+### Day 1: Evening (Hours 8-12) - Medicine Search with Bedrock
+**Goal:** Basic prescription processing and medicine search
+
+**Tasks:**
+- Create prescription text input (skip image upload for MVP)
+- Create Bedrock Agent for medicine extraction
+- Implement medicine name extraction using Bedrock
+- Build medicine search Lambda function with mock pharmacy data
+- Create medicine list UI with price sorting
+- Add Jan Aushadhi Kendra prioritization
+- Implement medicine detail view
+- Set up API Gateway endpoints
+
+**AWS Services Used:**
+- Amazon Bedrock Agents (medicine extraction)
+- AWS Lambda (medicine search)
+- AWS API Gateway (REST endpoints)
+
+**Deliverable:** Users can enter prescription and find affordable medicines
+
+### Day 2: Morning (Hours 12-16) - Emergency Mode & Bedrock Optimization
+**Goal:** Add emergency features with fast Bedrock responses
+
+**Tasks:**
+- Implement emergency mode toggle
+- Create Bedrock Agent for emergency detection
+- Optimize Bedrock Agent for <5 second response time
+- Create red theme for emergency mode
+- Build hospital bed search with facility filtering
+- Add emergency service contact simulation
+- Implement parallel ABDM/UHI API calls
+- Add CloudWatch logging for monitoring
+
+**AWS Services Used:**
+- Amazon Bedrock Agents (emergency detection)
+- AWS Lambda (hospital search)
+- Amazon CloudWatch (monitoring)
+
+**Deliverable:** Emergency mode functional with hospital search (<30 seconds)
+
+### Day 2: Afternoon (Hours 16-20) - Multilingual with AWS AI Services
+**Goal:** Add language support using AWS Translate, Polly, Transcribe
+
+**Tasks:**
+- Integrate Amazon Translate (2-3 Indian languages: Hindi, Tamil)
+- Add language selector to UI
+- Implement Amazon Transcribe for STT (Hindi voice input)
+- Implement Amazon Polly for TTS (optional, if time permits)
+- Connect to real ABDM/UHI APIs (if available) or refined mocks
+- Add error handling and loading states
+- Implement basic offline support (AsyncStorage cache)
+- Set up CloudWatch alarms for errors
+
+**AWS Services Used:**
+- Amazon Translate (multilingual support)
+- Amazon Transcribe (speech-to-text)
+- Amazon Polly (text-to-speech, optional)
+- Amazon CloudWatch (error monitoring)
+
+**Deliverable:** Multilingual support and API integration complete
+
+### Day 2: Evening (Hours 20-24) - Testing, Demo Prep & AWS Deployment
+**Goal:** Finalize MVP and deploy to AWS
+
+**Tasks:**
+- End-to-end testing of all user flows
+- Fix critical bugs
+- Deploy all Lambda functions to production
+- Configure API Gateway rate limiting
+- Set up CloudWatch dashboard for demo
+- Add demo data for presentation
+- Create demo script covering all features
+- Record demo video (backup for live demo)
+- Prepare pitch deck highlighting AWS services and impact
+- Deploy mobile app to Expo for testing
+
+**AWS Services Used:**
+- AWS SAM (deployment)
+- AWS API Gateway (rate limiting)
+- Amazon CloudWatch (dashboard)
+- AWS Amplify (mobile app hosting, optional)
+
+**Deliverable:** Working MVP deployed on AWS, ready for demo
+
+### MVP Scope Adjustments for Hackathon (AWS-Optimized)
+
+**Included (Must-Have):**
+- Patient profile and symptom input (text)
+- Amazon Bedrock Agents for AI (symptom analysis, medicine extraction, emergency detection)
+- Doctor search with distance sorting
+- Medicine search with price comparison
+- Emergency mode with hospital search
+- Amazon Translate for 2-3 Indian languages
+- Government facility prioritization
+- DynamoDB with TTL for data storage
+- Lambda functions for all backend logic
+- API Gateway for REST endpoints
+
+**Simplified (Good-Enough):**
+- Mock ABDM/UHI data (real API if time permits)
+- DynamoDB for caching (instead of ElastiCache)
+- Text-only prescription input (no Textract OCR)
+- Amazon Transcribe for STT (skip Polly TTS if time-constrained)
+- Manual CloudWatch monitoring (no automated alarms)
+- No authentication (public API with rate limiting)
+
+**Deferred (Post-Hackathon):**
+- Amazon Textract for prescription image OCR
+- Appointment booking functionality
+- Amazon Polly for TTS output
+- Comprehensive offline mode
+- ElastiCache Redis for advanced caching
+- Automated CloudWatch alarms and dashboards
+- AWS WAF for DDoS protection
+- Multi-region deployment
+- Production-grade security hardening
+
+### Hackathon Success Metrics
+
+**Technical:**
+- All 3 core flows working (doctor search, medicine search, emergency)
+- Amazon Bedrock Agents successfully analyze symptoms and extract medicines
+- Amazon Translate works for at least 2 Indian languages (Hindi + 1 more)
+- Emergency mode responds within 30 seconds
+- All data stored in DynamoDB with 24-hour TTL
+- API Gateway rate limiting prevents abuse
+
+**Demo:**
+- Clear demonstration of problem and solution
+- Live demo of all core features
+- Showcase AWS services integration (Bedrock, Translate, Lambda, DynamoDB)
+- Compelling story about impact on rural healthcare
+- Evidence of government facility prioritization and cost savings
+- CloudWatch dashboard showing real-time metrics
+
+**Technical:**
+- All 3 core flows working (doctor search, medicine search, emergency)
+- AI Agent successfully analyzes symptoms
+- Translation works for at least 2 Indian languages
+- Emergency mode responds within 30 seconds
+
+**Demo:**
+- Clear demonstration of problem and solution
+- Live demo of all core features
+- Compelling story about impact on rural healthcare
+- Evidence of government facility prioritization and cost savings

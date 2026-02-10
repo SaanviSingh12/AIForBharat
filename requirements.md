@@ -1,242 +1,199 @@
-# Requirements Document: Sahayak - AI Health Agent for Rural India
+# Requirements Document: Sahayak Health Services Application
 
-## Introduction
+## 1. Overview
 
-Sahayak is a multi-modal, agentic AI application designed for the Ayushman Bharat Digital Mission (ABDM) to bridge healthcare access gaps for rural patients in India.
+Sahayak is a healthcare application designed to help patients in India find affordable healthcare services and medicines by integrating with the Ayushman Bharat Digital Mission (ABDM) and United Health Interface (UHI) services. The application prioritizes accessibility for rural users with limited internet connectivity and medical knowledge.
 
-In India, healthcare does not fail because of a lack of doctors or medicines — it fails because access and affordability break down before treatment even begins.
+## 2. Target Users
 
-Every year, millions of patients delay care because they cannot explain symptoms in English, navigate digital health apps, or identify the right specialist. Even after reaching a doctor, many are pushed into buying expensive medicines simply because they cannot read prescriptions or ask for generic alternatives — despite government schemes like PMJAY and Jan Aushadhi existing precisely to prevent this.
+### 2.1 Primary Users
+- Patients seeking affordable healthcare and medicines
+- Users with limited medical knowledge
+- Users in remote/rural areas with poor internet connectivity
+- Users who may need to communicate in their native language
 
-Sahayak is a multi-modal, agentic AI built on the Ayushman Bharat Digital Mission (ABDM) that fixes both failures at once.
-It enables any Indian — regardless of literacy or language — to find free or low-cost government healthcare using voice and reduce medicine costs by up to 80% using vision-based generic discovery.
+### 2.2 Secondary Users
+- Hospitals registered in the ABDM system
+- Doctors and specialists
+- Pharmacies and Jan Aushadhi Kendras
 
-By intelligently connecting patients to UHI-enabled government hospitals and Jan Aushadhi Kendras, Sahayak transforms healthcare from a confusing maze into a guided, voice-first public service.
+## 3. User Stories and Acceptance Criteria
 
- The system provides voice-first doctor discovery and vision-based medicine finding capabilities, targeting the Next Billion Users who are primarily non-English speakers in rural areas.
+### 3.1 Patient Profile Management
 
-**Mission Statement:** "Breaking Language Barriers for Care, Breaking Cost Barriers for Cures."
+**User Story:** As a patient, I want to enter my personal details so that I can receive personalized healthcare recommendations.
 
-The system enables users to:
-1. Speak symptoms in their native language to discover the right doctors via the UHI(Unified Health Interface) network, explicitly highlighting nearby government hospitals offering free treatment under PMJAY(Pradhan Mantri Jan Arogya Yojana).
-It also identifies potentially dangerous symptoms early and clearly alerts the user to seek urgent hospital care instead of delaying treatment.
+**Acceptance Criteria:**
+- 3.1.1 Patient can enter name, age, and gender
+- 3.1.2 Patient details are stored securely
+- 3.1.3 Patient details are automatically deleted after 24 hours
+- 3.1.4 Patient can update their details at any time
 
-2. Upload prescription photos to find the cheapest generic medicine alternatives at Jan Aushadhi Kendras, reducing post-treatment expenses.
+### 3.2 Symptom Input
 
-## Glossary
+**User Story:** As a patient, I want to describe my symptoms in my native language so that I can get appropriate medical recommendations.
 
-- **Sahayak_System**: The complete AI health agent application including voice, vision, and discovery capabilities
-- **Voice_Triage_Module**: Component that processes audio input, performs speech-to-text, translation, and specialist inference
-- **Vision_Module**: Component that processes prescription images and extracts medicine information
-- **UHI_Discovery_Service**: Service that searches the ABDM/UHI network for healthcare providers
-- **Medicine_Price_Service**: Service that compares medicine prices between brands and Jan Aushadhi Kendras
-- **Bedrock_Agent**: Amazon Bedrock agent orchestrating the agentic workflow with action groups
-- **STT_Service**: Speech-to-Text service using Amazon Transcribe
-- **TTS_Service**: Text-to-Speech service using Amazon Polly
-- **OCR_Service**: Optical Character Recognition service using Amazon Textract
-- **ABDM**: Ayushman Bharat Digital Mission - India's national digital health ecosystem
-- **UHI**: Unified Health Interface - network protocol for healthcare provider discovery
-- **PMJAY**: Pradhan Mantri Jan Arogya Yojana - government health insurance scheme
-- **Jan_Aushadhi_Kendra**: Government-run generic medicine stores
-- **Beckn_Protocol**: Open protocol for decentralized commerce, used by UHI
-- **Government_Hospital**: Healthcare facility providing free services under PMJAY
-- **Private_Clinic**: Healthcare facility charging fees for services
-- **Generic_Medicine**: Medicine identified by its active pharmaceutical ingredient (salt name)
-- **Brand_Medicine**: Medicine identified by its commercial brand name
-- **Specialist_Type**: Medical specialty category (e.g., Cardiologist, Dermatologist, General Physician)
-- **Symptom_Description**: User-provided description of health concerns in natural language
-- **Native_Language**: User's preferred language (Hindi, Tamil, or other Indian languages)
-- **Emergency_Mode**: UI mode prioritizing urgent care access (red theme)
-- **Savings_Mode**: UI mode prioritizing cost-effective medicine options (green theme)
-
-## Requirements
-
-### Requirement 1: Voice Input Processing
-
-**User Story:** As a rural patient who cannot read or write, I want to speak my symptoms in my native language, so that I can communicate my health concerns without language barriers.
-
-#### Acceptance Criteria
-
-1. WHEN a user provides audio input in Hindi or Tamil or any language, THE STT_Service SHALL transcribe the audio to text within 2 seconds
-2. WHEN the transcribed text is in a native language, THE Voice_Triage_Module SHALL translate it to English for processing
-3. WHEN audio quality is poor or speech is unclear, THE Sahayak_System SHALL request the user to repeat their input
-4. WHEN background noise exceeds acceptable thresholds, THE STT_Service SHALL filter noise before transcription
-5. THE Voice_Triage_Module SHALL support audio input in multiple languages
-
-### Requirement 2: Symptom Analysis and Specialist Inference
-
-**User Story:** As a patient with limited medical knowledge, I want the system to understand my symptoms and recommend the right type of doctor, so that I can get appropriate medical care.
-
-#### Acceptance Criteria
-
-1. WHEN a Symptom_Description is provided, THE Bedrock_Agent SHALL analyze the symptoms and infer the appropriate Specialist_Type
-2. WHEN symptoms indicate potential emergency conditions, THE Bedrock_Agent SHALL prioritize Emergency_Mode and flag urgent care requirements
-3. WHEN symptoms are ambiguous or insufficient, THE Bedrock_Agent SHALL ask clarifying questions in the user's Native_Language
-4. THE Bedrock_Agent SHALL classify symptoms into at least 10 common Specialist_Type categories (General Physician, Cardiologist, Dermatologist, Pediatrician, Gynecologist, Orthopedic, ENT, Ophthalmologist, Dentist, Psychiatrist)
-5. WHEN inferring specialist type, THE Bedrock_Agent SHALL prioritize patient safety by over-estimating urgency rather than under-estimating
-
-### Requirement 3: Healthcare Provider Discovery via UHI Network
-
-**User Story:** As a rural patient seeking affordable healthcare, I want to find nearby doctors who accept government insurance, so that I can access free or low-cost medical care.
-
-#### Acceptance Criteria
-
-1. WHEN a Specialist_Type and user location are provided, THE UHI_Discovery_Service SHALL search the ABDM/UHI network for matching healthcare providers within 50 kilometers
-2. WHEN displaying search results, THE UHI_Discovery_Service SHALL prioritize Government_Hospital entries over Private_Clinic entries
-3. WHEN a Government_Hospital is available, THE Sahayak_System SHALL clearly indicate that services are free under PMJAY
-4. WHEN only Private_Clinic options are available, THE Sahayak_System SHALL display consultation fees prominently
-5. THE UHI_Discovery_Service SHALL return results sorted by distance from user location, with Government_Hospital entries appearing before Private_Clinic entries at the same distance
-6. WHEN no providers are found within 50 kilometers, THE UHI_Discovery_Service SHALL expand the search radius to 100 kilometers and notify the user
-7. THE UHI_Discovery_Service SHALL use Beckn_Protocol schemas for all search requests and responses
-
-### Requirement 4: Prescription Image Processing
-
-**User Story:** As a patient with a handwritten prescription, I want to upload a photo of my prescription, so that the system can read it and help me find affordable medicines.
-
-#### Acceptance Criteria
-
-1. WHEN a user uploads a prescription image, THE OCR_Service SHALL extract text from the image within 3 seconds
-2. WHEN the prescription contains handwritten text, THE OCR_Service SHALL recognize and extract medicine names with at least 85% accuracy
-3. WHEN the prescription image is blurry or poorly lit, THE Vision_Module SHALL request a clearer image from the user
-4. WHEN multiple medicines are listed in a prescription, THE Vision_Module SHALL extract all medicine names as a structured list
-5. THE Vision_Module SHALL support common prescription image formats (JPEG, PNG, HEIC)
-6. WHEN the prescription contains both brand names and generic names, THE Vision_Module SHALL identify and extract both
-
-### Requirement 5: Medicine Name Normalization
-
-**User Story:** As a patient who received a prescription with brand names, I want to know the generic alternatives, so that I can purchase cheaper medicines.
-
-#### Acceptance Criteria
-
-1. WHEN a Brand_Medicine name is extracted from a prescription, THE Medicine_Price_Service SHALL map it to the corresponding Generic_Medicine salt name
-2. WHEN a medicine name is ambiguous or has multiple possible matches, THE Medicine_Price_Service SHALL present all options to the user for selection
-3. WHEN a medicine name cannot be recognized, THE Medicine_Price_Service SHALL request clarification from the user
-4. THE Medicine_Price_Service SHALL maintain a database mapping of at least 500 common Brand_Medicine names to Generic_Medicine salt names
-5. WHEN a Generic_Medicine name is already provided in the prescription, THE Medicine_Price_Service SHALL use it directly without mapping
-
-### Requirement 6: Medicine Price Comparison
-
-**User Story:** As a cost-conscious patient, I want to compare prices between branded medicines and Jan Aushadhi generics, so that I can make informed purchasing decisions.
-
-#### Acceptance Criteria
-
-1. WHEN a Generic_Medicine is identified, THE Medicine_Price_Service SHALL retrieve prices from both brand pharmacies and Jan_Aushadhi_Kendra locations
-2. WHEN displaying price comparisons, THE Sahayak_System SHALL show the percentage savings when purchasing from Jan_Aushadhi_Kendra
-3. WHEN Jan_Aushadhi_Kendra prices are significantly lower (>50% savings), THE Sahayak_System SHALL highlight this in Savings_Mode with visual emphasis
-4. THE Medicine_Price_Service SHALL display prices for the nearest 3 Jan_Aushadhi_Kendra locations based on user location
-5. WHEN a medicine is not available at Jan_Aushadhi_Kendra, THE Medicine_Price_Service SHALL indicate this and show only brand pharmacy prices
-6. THE Sahayak_System SHALL display both per-unit price and total prescription cost for comparison
-
-### Requirement 7: Location Services
-
-**User Story:** As a mobile user, I want the system to automatically detect my location, so that I can find nearby healthcare providers and pharmacies without manual entry.
-
-#### Acceptance Criteria
-
-1. WHEN the application starts, THE Sahayak_System SHALL request location permissions from the user
-2. WHEN location permissions are granted, THE Sahayak_System SHALL use Amazon Location Service to determine the user's current coordinates
-3. WHEN location permissions are denied, THE Sahayak_System SHALL allow manual location entry via city/district/pincode
-
-### Requirement 8: Multilingual Audio Output
-
-**User Story:** As a non-English speaking user, I want to hear responses in my native language, so that I can understand the information provided by the system.
-
-#### Acceptance Criteria
-
-1. WHEN the system generates a response, THE TTS_Service SHALL convert text to speech in the user's Native_Language
-2. THE TTS_Service SHALL support both Hindi and Tamil language output with natural-sounding voices
-3. WHEN providing doctor recommendations, THE TTS_Service SHALL speak the doctor's name, specialty, hospital name, distance, and cost information
-4. WHEN providing medicine information, THE TTS_Service SHALL speak the generic name, brand name, and price comparison
-5. THE TTS_Service SHALL deliver audio responses within 2 seconds of text generation
-6. THE Sahayak_System SHALL allow users to replay audio responses without regenerating them
-
-### Requirement 9: Bedrock Agent Orchestration
-
-**User Story:** As a system architect, I want the AI agent to coordinate multiple services intelligently, so that the system provides coherent and contextual responses.
-
-#### Acceptance Criteria
-
-1. THE Bedrock_Agent SHALL implement an action group with tool_find_doctor function accepting symptom and location parameters
-2. THE Bedrock_Agent SHALL implement an action group with tool_find_medicine function accepting image_text and location parameters
-3. WHEN a user query requires multiple steps, THE Bedrock_Agent SHALL execute action groups in the appropriate sequence
-4. WHEN an action group fails, THE Bedrock_Agent SHALL provide a meaningful error message in the user's Native_Language
-5. THE Bedrock_Agent SHALL maintain conversation context across multiple user interactions within a session
-6. THE Bedrock_Agent SHALL use Claude 3.5 Sonnet model for natural language understanding and generation
-
-### Requirement 10: Emergency Mode Handling
-
-**User Story:** As a patient with urgent symptoms, I want the system to recognize emergencies and prioritize immediate care options, so that I can get help quickly.
-
-#### Acceptance Criteria
-
-1. WHEN symptoms indicate potential emergency conditions (chest pain, severe bleeding, difficulty breathing, loss of consciousness), THE Bedrock_Agent SHALL activate Emergency_Mode
-2. WHEN Emergency_Mode is activated, THE Sahayak_System SHALL display a red-themed UI with prominent emergency indicators
-3. WHEN in Emergency_Mode, THE UHI_Discovery_Service SHALL prioritize hospitals with emergency departments over clinics
-4. WHEN in Emergency_Mode, THE Sahayak_System SHALL provide emergency helpline numbers (108 ambulance service)
-5. WHEN Emergency_Mode is activated, THE Sahayak_System SHALL skip non-essential questions and expedite the search process
-
-
-### Requirement 11: Error Handling and User Feedback
-
-**User Story:** As a user, I want clear feedback when something goes wrong, so that I know what to do next.
-
-#### Acceptance Criteria
-
-1. WHEN an API call fails, THE Sahayak_System SHALL display an error message in the user's Native_Language explaining the issue
-2. WHEN the STT_Service cannot transcribe audio, THE Sahayak_System SHALL ask the user to speak more clearly or reduce background noise
-3. WHEN the OCR_Service cannot read a prescription, THE Sahayak_System SHALL provide tips for taking a better photo
-4. WHEN no healthcare providers are found, THE Sahayak_System SHALL suggest expanding the search radius or trying a different specialist type
-5. WHEN the system encounters an unexpected error, THE Sahayak_System SHALL log the error details and display a generic error message to the user
-6. THE Sahayak_System SHALL provide a retry option for all failed operations
-
-### Requirement 12: Beckn Protocol Compliance
-
-**User Story:** As a system integrator, I want the system to use standard Beckn Protocol schemas, so that it can interoperate with the UHI network.
-
-#### Acceptance Criteria
-
-1. WHEN making UHI search requests, THE UHI_Discovery_Service SHALL format requests according to Beckn Protocol search schema
-2. WHEN receiving UHI responses, THE UHI_Discovery_Service SHALL parse responses according to Beckn Protocol on_search schema
-3. THE UHI_Discovery_Service SHALL include required Beckn Protocol fields (context, message) in all requests
-4. THE UHI_Discovery_Service SHALL validate Beckn Protocol responses before processing them
-5. WHEN Beckn Protocol validation fails, THE UHI_Discovery_Service SHALL log the validation error and return a user-friendly error message
-
-### Requirement 13: Mobile-First User Interface
-
-**User Story:** As a mobile user, I want an intuitive interface optimized for smartphones, so that I can easily access healthcare services on my device.
-
-#### Acceptance Criteria
-
-1. THE Sahayak_System SHALL provide a mobile application built with React Native or Flutter
-2. THE Sahayak_System SHALL support both portrait and landscape orientations
-3. WHEN in Emergency_Mode, THE Sahayak_System SHALL display a red-themed interface with large, easily tappable buttons
-4. WHEN in Savings_Mode, THE Sahayak_System SHALL display a green-themed interface highlighting cost savings
-5. THE Sahayak_System SHALL provide voice input buttons prominently on the main screen
-6. THE Sahayak_System SHALL provide camera/gallery access buttons for prescription upload
-7. THE Sahayak_System SHALL display results in a scrollable list with clear visual hierarchy
-
-### Requirement 14: Security and Privacy
-
-**User Story:** As a patient, I want my health information to be kept private and secure, so that my medical data is not misused.
-
-#### Acceptance Criteria
-
-1. THE Sahayak_System SHALL not store audio recordings after transcription is complete
-2. THE Sahayak_System SHALL not store prescription images after OCR processing is complete
-3. THE Sahayak_System SHALL encrypt all data in transit using HTTPS/TLS
-4. THE Sahayak_System SHALL encrypt sensitive data at rest in DynamoDB
-5. THE Sahayak_System SHALL not share user health data with third parties without explicit consent
-6. THE Sahayak_System SHALL comply with Indian data protection regulations and ABDM privacy guidelines
-
-### Requirement 15: Data Persistence and Caching
-
-**User Story:** As a system administrator, I want to cache frequently accessed data, so that the system responds quickly even with limited network connectivity.
-
-#### Acceptance Criteria
-
-1. THE Sahayak_System SHALL cache UHI network responses in DynamoDB for up to 24 hours
-2. THE Sahayak_System SHALL cache medicine price data in DynamoDB for up to 7 days
-3. WHEN cached data is available and less than the expiration time, THE Sahayak_System SHALL use cached data instead of making new API calls
-4. WHEN cached data is stale or unavailable, THE Sahayak_System SHALL fetch fresh data and update the cache
-5. THE Sahayak_System SHALL store user session data in DynamoDB with automatic expiration after 1 hour of inactivity
-
+**Acceptance Criteria:**
+- 3.2.1 Patient can type symptoms in their native language
+- 3.2.2 Patient can speak symptoms using voice input (Speech-to-Text)
+- 3.2.3 AI Agent translates native language input to English
+- 3.2.4 Patient can input post-medication symptoms
+- 3.2.5 System validates and confirms understood symptoms with the patient
+
+### 3.3 Prescription Upload
+
+**User Story:** As a patient, I want to upload my prescription so that I can find affordable medicine alternatives.
+
+**Acceptance Criteria:**
+- 3.3.1 Patient can upload prescription as an image
+- 3.3.2 Patient can enter prescription as text
+- 3.3.3 System uses Amazon OCR to extract text from prescription images
+- 3.3.4 System extracts medicine names from prescription
+- 3.3.5 System identifies active ingredients from medicine names
+
+### 3.4 Location Services
+
+**User Story:** As a patient, I want to provide my location so that I can find nearby healthcare services.
+
+**Acceptance Criteria:**
+- 3.4.1 System automatically fetches location using smartphone GPS
+- 3.4.2 Patient can manually enter location if GPS is unavailable
+- 3.4.3 System validates location data
+- 3.4.4 Location data is deleted after 24 hours
+
+### 3.5 Doctor and Specialist Recommendations
+
+**User Story:** As a patient, I want to find nearby doctors and specialists based on my symptoms so that I can get appropriate treatment.
+
+**Acceptance Criteria:**
+- 3.5.1 AI Agent analyzes symptoms and patient details
+- 3.5.2 System recommends appropriate doctors/specialists
+- 3.5.3 System displays doctors sorted by distance from patient location
+- 3.5.4 System prioritizes government healthcare facilities
+- 3.5.5 System shows doctor availability and consultation fees
+- 3.5.6 Patient can view doctor profiles and specializations
+- 3.5.7 Patient can book appointments with selected doctors
+
+### 3.6 Affordable Medicine Search
+
+**User Story:** As a patient, I want to find cheaper generic alternatives to prescribed medicines so that I can save money.
+
+**Acceptance Criteria:**
+- 3.6.1 System extracts active ingredients from prescription
+- 3.6.2 System searches for generic medicines at nearby Jan Aushadhi Kendras
+- 3.6.3 If no Jan Aushadhi Kendra is available, system shows brand-name alternatives at nearby pharmacies
+- 3.6.4 System displays medicine prices prominently
+- 3.6.5 System sorts medicines by price (cheapest first)
+- 3.6.6 Patient can tap on medicine to view details (chemical composition, side effects, dosage)
+- 3.6.7 System shows distance to pharmacy/Jan Aushadhi Kendra
+
+### 3.7 Emergency Hospital Bed Locator
+
+**User Story:** As a patient in an emergency, I want to quickly find nearby hospitals with available beds and required facilities so that I can receive immediate treatment.
+
+**Acceptance Criteria:**
+- 3.7.1 Patient can manually activate emergency mode
+- 3.7.2 System requires symptom input even in emergency mode
+- 3.7.3 AI Agent analyzes symptoms to determine if situation is an emergency
+- 3.7.4 If emergency is confirmed, app switches to red color theme
+- 3.7.5 System queries ABDM and UHI services for nearby hospitals with available beds
+- 3.7.6 System filters hospitals based on required facilities (e.g., ventilator for respiratory emergency)
+- 3.7.7 System displays hospitals sorted by distance
+- 3.7.8 System shows bed availability and facility information
+- 3.7.9 System contacts emergency services automatically
+- 3.7.10 Emergency processing completes within 30 seconds
+
+### 3.8 Multilingual AI Agent
+
+**User Story:** As a patient who speaks a native Indian language, I want to communicate with an AI agent in my language so that I can accurately describe my symptoms.
+
+**Acceptance Criteria:**
+- 3.8.1 AI Agent supports major Indian languages
+- 3.8.2 AI Agent uses Speech-to-Text (STT) for voice input
+- 3.8.3 AI Agent uses Text-to-Speech (TTS) for voice output
+- 3.8.4 AI Agent translates between native language and English
+- 3.8.5 AI Agent reads and interprets prescriptions
+- 3.8.6 AI Agent provides responses in patient's native language
+
+## 4. Technical Requirements
+
+### 4.1 Performance
+- 4.1.1 Application must be optimized for low-bandwidth environments
+- 4.1.2 Application must work on 2G/3G networks
+- 4.1.3 Emergency mode processing must complete within 30 seconds
+- 4.1.4 Search results must load within 5 seconds on 3G connection
+
+### 4.2 Data Privacy and Security
+- 4.2.1 All user data must be encrypted in transit and at rest
+- 4.2.2 Patient details must be automatically deleted after 24 hours
+- 4.2.3 Location data must be automatically deleted after 24 hours
+- 4.2.4 Prescription images must be automatically deleted after 24 hours
+- 4.2.5 Application must comply with Indian data protection regulations
+
+### 4.3 API Integration
+- 4.3.1 Application must integrate with ABDM services
+- 4.3.2 Application must integrate with UHI services
+- 4.3.3 API responses must be cached for 24 hours to avoid overloading
+- 4.3.4 Application must handle API failures gracefully
+
+### 4.4 External Services
+- 4.4.1 Application must use Amazon OCR for prescription image processing
+- 4.4.2 Application must integrate with emergency services
+- 4.4.3 Application must use GPS services for location detection
+- 4.4.4 Application must use TTS (Text-to-Speech) and STT (Speech-to-Text) services
+- 4.4.5 TTS/STT may be provided by Amazon services or AI Agent's built-in functionality
+- 4.4.6 AI Agent selection should be based on suitability for rural Indian users and language support
+
+### 4.5 Offline Capability
+- 4.5.1 Application should cache previously searched data for offline access
+- 4.5.2 Application should indicate when operating in offline mode
+- 4.5.3 Application should queue actions when offline and sync when online
+
+## 5. Success Metrics
+
+### 5.1 Healthcare Access
+- 5.1.1 Patient successfully finds and books appointment with doctor/specialist
+- 5.1.2 Patient successfully locates hospital bed in emergency
+- 5.1.3 Patient receives treatment within acceptable timeframe
+
+### 5.2 Cost Savings
+- 5.2.1 Patient saves money by using government healthcare facilities
+- 5.2.2 Patient saves money by purchasing generic medicines from Jan Aushadhi
+- 5.2.3 Average cost savings per patient is measurable and significant
+
+### 5.3 Emergency Response
+- 5.3.1 Emergency cases are identified within 30 seconds
+- 5.3.2 Emergency services are contacted automatically
+- 5.3.3 Patient receives lifesaving treatment quickly
+
+### 5.4 User Awareness
+- 5.4.1 Patient discovers new healthcare providers in their area
+- 5.4.2 Patient becomes aware of government healthcare options
+- 5.4.3 Patient learns about Jan Aushadhi Kendras and generic medicines
+
+## 6. Constraints
+
+### 6.1 User Constraints
+- Users may have limited medical knowledge
+- Users may be in remote areas with poor connectivity
+- Users may only speak native Indian languages
+- Users may have limited smartphone literacy
+
+### 6.2 Technical Constraints
+- Must work efficiently on low-bandwidth networks
+- Must minimize data storage (24-hour retention limit)
+- Must avoid overloading ABDM and UHI APIs
+- Must process emergencies quickly
+
+### 6.3 Regulatory Constraints
+- Must comply with Indian healthcare regulations
+- Must comply with data protection laws
+- Must handle medical data responsibly
+
+## 7. Out of Scope
+
+- Direct medicine ordering/delivery
+- Payment processing for consultations
+- Telemedicine video consultations
+- Health records management beyond 24 hours
+- Insurance claim processing
