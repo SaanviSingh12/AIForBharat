@@ -192,6 +192,7 @@ sequenceDiagram
 - Play audio responses
 - Handle user interactions and navigation
 - Request and manage location permissions
+- Focus on accessibility to reach wider population 
 
 **UI Modes**:
 
@@ -363,9 +364,10 @@ The Bedrock Agent activates Emergency_Mode when symptoms indicate:
 ### Error Handling Strategies
 
 1. **Graceful Degradation**
-   - If TTS fails, return text response only
+   - If TTS fails, return text response only - for accessibility, text response can be read aloud by the client device's inbuilt screen reader
    - If cache is unavailable, proceed with direct API calls
    - If location service fails, allow manual location entry
+   - If prescription OCR fails, allow manual prescription entry
 
 2. **User Guidance**
    - Provide specific instructions for fixing input errors

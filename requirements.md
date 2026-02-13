@@ -184,7 +184,7 @@ It also identifies potentially dangerous symptoms early and clearly alerts the u
 
 1. WHEN an API call fails, THE Sahayak_System SHALL display an error message in the user's Native_Language explaining the issue
 2. WHEN the STT_Service cannot transcribe audio, THE Sahayak_System SHALL ask the user to speak more clearly or reduce background noise
-3. WHEN the OCR_Service cannot read a prescription, THE Sahayak_System SHALL provide tips for taking a better photo
+3. WHEN the OCR_Service cannot read a prescription, THE Sahayak_System SHALL provide tips for taking a better photo and offer the option to manually enter the prescription
 4. WHEN no healthcare providers are found, THE Sahayak_System SHALL suggest expanding the search radius or trying a different specialist type
 5. WHEN the system encounters an unexpected error, THE Sahayak_System SHALL log the error details and display a generic error message to the user
 6. THE Sahayak_System SHALL provide a retry option for all failed operations
