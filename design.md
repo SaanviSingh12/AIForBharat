@@ -29,58 +29,74 @@ Sahayak is a mobile-first, multi-modal AI health agent designed to bridge health
 ### High-Level System Architecture
 
 ```mermaid
-graph TB
-    subgraph Mobile["Mobile Application (React Native/Flutter)"]
-        Voice[Voice Interface<br/>Microphone]
-        Camera[Camera Interface<br/>Prescription]
+graph LR
+    subgraph Mobile["Mobile Application<br/> (React Native/Flutter)"]
+        Voice["Voice Interface (Microphone)"]
+        Prescription["Prescription upload (Camera)"]
     end
-    
-    Voice -->|Audio<br/>Hindi/Tamil| Gateway
-    Camera -->|Image<br/>JPEG/PNG| Gateway
-    
-    Gateway[API Gateway REST]
-    
-    Gateway --> VoiceTriage[Voice Triage Endpoint<br/>/api/v1/triage]
-    Gateway --> VisionProc[Vision Processing Endpoint<br/>/api/v1/prescription]
-    
-    subgraph Backend["Backend Service Layer (Python FastAPI/Node.js)"]
-        VoiceTriage --> BedrockAgent
-        VisionProc --> BedrockAgent
+
+    GateWay["API Gateway (REST)"]
+
+    Mobile <--> GateWay
+
+    subgraph Backend
+        direction TB
+        subgraph Controller
+            direction LR
+            VoiceEndpt["Voice Triage Endpoint"]
+            PrescriptionEndpt["Prescription Endpoint"]
+        end
+
+        subgraph Service
+            direction LR
+            VoiceTriage["Voice Triage Service"]
+            PrescriptionVisionProcessing["Prescription Vision Processing"]
+        end
+
+        ModelLayer["Model/Data Layer"]
+
+        VoiceTriage <--> VoiceEndpt
+        PrescriptionEndpt <--> PrescriptionVisionProcessing
+        Service <--> ModelLayer
+    end
+
+    subgraph AWSServices["AWS Services"]
+        AWSTranscribe["AWS Transcribe"]
+        AWSTextract["AWS Textract"]
+        subgraph CommonAWSServices["Common AWS Services"]
+            AWSPolly["AWS Polly"]
+            AWSLocationService["AWS Location Services"]
+        end
+    end
+
+    VoiceTriage <--> AWSTranscribe
+    PrescriptionVisionProcessing <--> AWSTextract
+    CommonAWSServices <--> Service
+
+    subgraph AI[Amazon Bedrock Agent]
+        DoctorFindActionGroup["Action Group - Find Doctor"]
+        MedicinePriceActionGroup["Action Group - Find Cheap Medicines"]
+    end
+
+    subgraph ExternalServices["External Services"]
+        UHIApi["<b>UHI Network - Beckn Protocol</b><br/>Healthcare provider discovery <br/> + <br/> ABDM integration"]
+        JanAushadhiData["<b>Jan Aushadhi Data</b><br/>Data with location of Jan Aushadhi Kendras, used as a backup"]
+    end
+
+    UHIApi <-->|In case Jan Aushadhi data cannot be retrieved|JanAushadhiData
+
+    ExternalServices <--> AI
+    AI<-->Service
+
+    subgraph DataLayer["Data And Cache Layer"]
+        AmazonDynamoDB["<b>Amazon DynamoDB</b><br/>Temporary storage + cache for data"]
+    end
         
-        BedrockAgent[Amazon Bedrock Agent<br/>Claude 3.5 Sonnet<br/><br/>Action Groups:<br/>• tool_find_doctor<br/>• tool_find_medicine]
+    ModelLayer <--> DataLayer
         
-        BedrockAgent --> UHIService[UHI Discovery Service]
-        BedrockAgent --> MedService[Medicine Price Service]
-    end
-    
-    subgraph AWS["AWS AI/ML Services"]
-        Transcribe[Amazon Transcribe<br/>STT]
-        Polly[Amazon Polly<br/>TTS]
-        Textract[Amazon Textract<br/>OCR]
-        Location[Amazon Location Service<br/>Geolocation]
-    end
-    
-    UHIService --> AWS
-    MedService --> AWS
-    
-    subgraph Data["Data & Cache Layer"]
-        DynamoDB[Amazon DynamoDB<br/>Temporary Cache & Session Storage]
-        MockData[Mock Data Development Mode<br/>• hospitals.json<br/>• medicines.json]
-    end
-    
-    AWS --> Data
-    
-    subgraph External["External Integrations"]
-        UHI[UHI Network Beckn Protocol<br/>• Healthcare Provider Discovery<br/>• ABDM Integration]
-    end
-    
-    Data --> External
-    
-    style Mobile fill:#e1f5ff
-    style Backend fill:#fff4e1
-    style AWS fill:#ffe1f5
-    style Data fill:#e1ffe1
-    style External fill:#f5e1ff
+
+    GateWay <--> Controller
+
 ```
 
 ### Data Flow Diagrams
